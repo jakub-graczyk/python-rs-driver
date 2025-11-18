@@ -2,7 +2,7 @@ import struct
 from collections.abc import Iterator, Mapping
 from typing import Protocol, runtime_checkable
 
-from scylla.serialize import column_type
+from scylla_python_serialization.serialize import column_type
 
 
 class SerializationError(Exception):

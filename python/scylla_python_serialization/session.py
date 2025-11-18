@@ -1,5 +1,5 @@
-from scylla.serialize.column_type import RowSerializationContext
-from scylla.serialize.serialize import ValueList
+from scylla_python_serialization.serialize.column_type import RowSerializationContext
+from scylla_python_serialization.serialize.serialize import ValueList
 
 from ._rust.session import (
     PyPreparedStatement,

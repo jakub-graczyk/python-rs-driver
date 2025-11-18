@@ -116,7 +116,7 @@ fn rust_row_context_to_python(
     py: Python<'_>,
     row_context: &RowSerializationContext,
 ) -> PyResult<PyObject> {
-    let module = py.import("scylla.serialize.column_type")?;
+    let module = py.import("scylla_python_serialization.serialize.column_type")?;
 
     let columns_list = PyList::empty(py);
     for col_spec in row_context.columns() {
@@ -132,7 +132,7 @@ fn rust_row_context_to_python(
 }
 
 fn rust_column_spec_to_python(py: Python<'_>, col_spec: &ColumnSpec) -> PyResult<PyObject> {
-    let module = py.import("scylla.serialize.column_type")?;
+    let module = py.import("scylla_python_serialization.serialize.column_type")?;
 
     let table_spec_class = module.getattr("TableSpec")?;
     let table_spec_kwargs = PyDict::new(py);
@@ -154,7 +154,7 @@ fn rust_column_spec_to_python(py: Python<'_>, col_spec: &ColumnSpec) -> PyResult
 }
 
 fn rust_column_type_to_python(py: Python<'_>, column_type: &ColumnType) -> PyResult<PyObject> {
-    let module = py.import("scylla.serialize.column_type")?;
+    let module = py.import("scylla_python_serialization.serialize.column_type")?;
 
     match column_type {
         ColumnType::Native(native_type) => {
