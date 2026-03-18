@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::RUNTIME;
 use crate::batch::PyBatch;
+use crate::cluster::state::PyClusterState;
 use crate::deserialize::results::{Pager, PyPagingState, RequestResult, RowFactory};
 use crate::errors::{
     DriverExecuteError, DriverPrepareError, DriverSchemaAgreementError,
@@ -11,6 +12,7 @@ use crate::serialize::value_list::PyValueList;
 use crate::statement::PreparedStatement;
 use crate::statement::Statement;
 use pyo3::prelude::*;
+use pyo3::sync::MutexExt;
 use pyo3::types::PyString;
 use scylla::client::session::Session as ScyllaSession;
 use scylla::response::query_result::QueryResult;
@@ -24,6 +26,23 @@ use std::future::Future;
 #[derive(Clone)]
 pub(crate) struct Session {
     pub(crate) _inner: Arc<ScyllaSession>,
+    pub(crate) cluster_state: Arc<Mutex<Py<PyClusterState>>>,
+}
+
+impl Session {
+    pub(crate) fn new<'py>(
+        _inner: Arc<scylla::client::session::Session>,
+        py: Python<'py>,
+    ) -> PyResult<Self> {
+        let cluster_state = Arc::new(Mutex::new(Py::new(
+            py,
+            PyClusterState::new(_inner.get_cluster_state(), py)?,
+        )?));
+        Ok(Self {
+            cluster_state,
+            _inner,
+        })
+    }
 }
 
 #[pymethods]
@@ -109,6 +128,22 @@ impl Session {
             .await?;
 
         Ok(schema_version)
+    }
+
+    #[getter]
+    fn get_cluster_state<'py>(&self, py: Python<'py>) -> PyResult<Py<PyClusterState>> {
+        let mut session_cs = self
+            .cluster_state
+            .lock_py_attached(py)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        if Arc::as_ptr(&self._inner.get_cluster_state()) != Arc::as_ptr(&session_cs.get()._inner) {
+            *session_cs = Py::new(
+                py,
+                PyClusterState::new(self._inner.get_cluster_state(), py)?,
+            )?;
+        }
+
+        Ok(session_cs.clone_ref(py))
     }
 }
 

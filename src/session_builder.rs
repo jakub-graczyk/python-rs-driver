@@ -74,9 +74,7 @@ impl SessionBuilder {
             .spawn(async move { scylla::client::session::Session::connect(config).await })
             .await?;
         match session_result {
-            Ok(session) => Ok(Session {
-                _inner: Arc::new(session),
-            }),
+            Ok(session) => Python::attach(|py| Session::new(Arc::new(session), py)),
             Err(err) => Err(DriverSessionConnectionError::new_session_error(err)),
         }
     }
