@@ -49,6 +49,10 @@ create_exception!(errors, ValueOverflowSerializationError, SerializationError);
 create_exception!(errors, SerializeFailedError, SerializationError);
 create_exception!(errors, PySerializationFailedError, SerializationError);
 
+create_exception!(errors, PartitionKeySerializationError, SerializationError);
+create_exception!(errors, TokenCalculationError, ScyllaError);
+create_exception!(errors, UnknownTableError, ScyllaError);
+
 // Policy: DriverError types are pure Rust and contain PyErr only as source
 // in cases where the error originated from Python code (e.g. during extraction or user callbacks).
 // Conversion to PyErr happens at the boundary (e.g. in #[pymethods] implementations)
@@ -1192,6 +1196,52 @@ impl From<DriverSerializationError> for PyErr {
 impl From<DriverSerializationError> for scylla::serialize::SerializationError {
     fn from(err: DriverSerializationError) -> Self {
         scylla::serialize::SerializationError::new(err)
+    }
+}
+
+#[derive(Debug)]
+pub struct DriverClusterStateTokenError(pub scylla::errors::ClusterStateTokenError);
+
+impl DriverClusterStateTokenError {
+    pub fn new(err: scylla::errors::ClusterStateTokenError) -> Self {
+        Self(err)
+    }
+}
+
+impl From<scylla::errors::ClusterStateTokenError> for DriverClusterStateTokenError {
+    fn from(err: scylla::errors::ClusterStateTokenError) -> Self {
+        Self(err)
+    }
+}
+
+impl From<DriverClusterStateTokenError> for PyErr {
+    fn from(err: DriverClusterStateTokenError) -> Self {
+        #[deny(clippy::wildcard_enum_match_arm)]
+        match err.0 {
+            scylla::errors::ClusterStateTokenError::TokenCalculation(e) =>
+            {
+                #[deny(clippy::wildcard_enum_match_arm)]
+                match e {
+                    scylla::statement::prepared::TokenCalculationError::ValueTooLong(len) => {
+                        let msg = format!(
+                            "Value bytes too long to create partition key, max 65 535 allowed, got : {:?}",
+                            len
+                        );
+                        TokenCalculationError::new_err(msg)
+                    }
+                    _ => unreachable!("clippy testifies that the match is exhaustive"),
+                }
+            }
+            scylla::errors::ClusterStateTokenError::Serialization(err) => {
+                let msg = format!("Partition key serialization error: {:?}", err);
+                PartitionKeySerializationError::new_err(msg)
+            }
+            scylla::errors::ClusterStateTokenError::UnknownTable { keyspace, table } => {
+                let msg = format!("Unknown table: keyspace={} table={}", keyspace, table);
+                UnknownTableError::new_err(msg)
+            }
+            _ => unreachable!("clippy testifies that the match is exhaustive"),
+        }
     }
 }
 

@@ -9,7 +9,12 @@ use pyo3::{
 use scylla::cluster::ClusterState;
 use uuid::Uuid;
 
-use crate::{cluster::node::PyNode, routing::PyToken, serialize::value_list::PyValueList};
+use crate::{
+    cluster::node::PyNode,
+    errors::{DriverBatchError, DriverClusterStateTokenError},
+    routing::PyToken,
+    serialize::value_list::PyValueList,
+};
 
 #[pyclass(name = "ClusterState", frozen, skip_from_py_object)]
 pub(crate) struct PyClusterState {
@@ -113,11 +118,11 @@ impl PyClusterState {
         keyspace: &str,
         table: &str,
         partition_key: PyValueList,
-    ) -> PyResult<PyToken> {
+    ) -> Result<PyToken, DriverClusterStateTokenError> {
         self._inner
             .compute_token(keyspace, table, &partition_key)
             .map(|t| PyToken { _inner: t })
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(format!("Error computing token: {}", e)))
+            .map_err(Into::into)
     }
 
     fn get_token_endpoints<'py>(
@@ -148,13 +153,11 @@ impl PyClusterState {
         table: &str,
         partition_key: PyValueList,
         py: Python<'py>,
-    ) -> PyResult<Bound<'py, PyList>> {
+    ) -> Result<Bound<'py, PyList>, DriverClusterStateTokenError> {
         let py_nodes_sequence = self
             ._inner
             .get_endpoints(keyspace, table, &partition_key)
-            .map_err(|e| {
-                PyErr::new::<PyRuntimeError, _>(format!("Error getting endpoints: {}", e))
-            })?
+            .map_err(Into::into)?
             .into_iter()
             .map(|node| {
                 let py_node = self.get_or_init_node_from_cache(py, &node.0.host_id)?;
