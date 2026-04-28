@@ -16,11 +16,11 @@ mod tests {
             let cache = Cache::<String, PyInt>::new();
             let calls = Arc::new(AtomicUsize::new(0));
 
-            let key = "a".to_string();
+            let key = "a";
 
             let calls1 = calls.clone();
             let v1 = cache
-                .get_or_init(py, &key, |_| {
+                .get_or_init(py, key, |_| {
                     calls1.fetch_add(1, Ordering::SeqCst);
                     Ok(Some(42i64.into_pyobject(py)?.unbind()))
                 })
@@ -29,7 +29,7 @@ mod tests {
 
             let calls2 = calls.clone();
             let v2 = cache
-                .get_or_init(py, &key, |_| {
+                .get_or_init(py, key, |_| {
                     calls2.fetch_add(1, Ordering::SeqCst);
                     Ok(Some(999i64.into_pyobject(py)?.unbind()))
                 })
