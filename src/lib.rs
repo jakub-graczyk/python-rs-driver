@@ -269,27 +269,38 @@ impl<K, V> Cache<K, V> {
             .map(|(k, v_res)| Ok((k, v_res?)))
             .collect::<PyResult<Vec<_>>>()?;
 
+        let mut frozen_map = {
+            let read_guard = self.state.read_py_attached(py).unwrap();
+            match &*read_guard {
+                CacheState::Frozen { view, .. } => return Ok(view.clone_ref(py).into_bound(py)),
+                CacheState::Active { map } => {
+                    // This is relatively cheap to clone.
+                    // Enables propagating error from dict inserts.
+                    map.clone()
+                }
+            }
+        };
+
+        // Avoid work inside write lock.
+        // Tradeoff wasted work for lock contention.
+
+        for (k, v) in entries {
+            frozen_map.entry(k).or_insert_with(|| v);
+        }
+        let dict = PyDict::new(py);
+        for (k, v) in frozen_map.iter() {
+            dict.set_item(k.clone(), v.clone_ref(py))?;
+        }
+
+        let mapping = dict.as_mapping();
+        let view = PyMappingProxy::new(py, mapping).unbind();
+
+        let ret = view.clone_ref(py).into_bound(py);
+
         let mut write_guard = self.state.write_py_attached(py).unwrap();
-        match &mut *write_guard {
+        match &*write_guard {
             CacheState::Frozen { view, .. } => Ok(view.clone_ref(py).into_bound(py)),
-            CacheState::Active { map } => {
-                // This is relatively cheap to clone.
-                // Enables propagating error from dict inserts.
-                let mut frozen_map = map.clone();
-
-                for (k, v) in entries {
-                    frozen_map.entry(k).or_insert_with(|| v);
-                }
-                let dict = PyDict::new(py);
-                for (k, v) in frozen_map.iter() {
-                    dict.set_item(k.clone(), v.clone_ref(py))?;
-                }
-
-                let mapping = dict.as_mapping();
-                let view = PyMappingProxy::new(py, mapping).unbind();
-
-                let ret = view.clone_ref(py).into_bound(py);
-
+            CacheState::Active { .. } => {
                 *write_guard = CacheState::Frozen {
                     map: frozen_map,
                     view,
